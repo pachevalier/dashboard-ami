@@ -1,0 +1,177 @@
+---
+title: "Présélection AMI IA"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(DT)
+library(wesanderson)
+library(purrr)
+library(dplyr)
+source("functions.R")
+df_notes <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
+  keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
+  map_df(
+    .f = get_review
+    ) 
+df_evaluateurs <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
+  keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
+  map_df(
+    .f = get_evaluateur
+    ) 
+df_projets_notes <- df_notes %>%
+  group_by(slug, critere) %>% 
+  summarise(note = mean(note_entre_1_et_5_, na.rm = TRUE)) %>%
+  group_by(slug) %>%
+  summarise(note = mean(note, na.rm = TRUE)) %>%
+  arrange(desc(note))
+
+df_coeurs_evaluateurs <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
+  keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
+  map_df(
+    .f = get_coupdecoeur
+  ) 
+
+df_projets_evaluateurs <- df_notes %>%
+  group_by(file) %>% 
+  summarise(
+    note = mean(note_entre_1_et_5_, na.rm = TRUE)
+    ) %>%
+  left_join(
+    y = df_coeurs_evaluateurs, 
+    by = "file"
+    ) %>%
+  left_join(
+    y = df_evaluateurs, 
+    by = "file"
+  )
+
+df_coeurs <- df_coeurs_evaluateurs %>%
+  group_by(slug) %>%
+  summarise(
+    alerte = sum(alerte), 
+    coup_de_coeur = sum(coup_de_coeur), 
+    n_evaluateurs = n()
+    )
+
+df_projets <- df_projets_notes %>% 
+  left_join(
+    y = df_coeurs, 
+    by = "slug"
+    ) 
+
+df_projets %>%
+  readr::write_csv(path = "table_projets.csv")
+```
+Dashboard {data-icon="fa-tachometer" data-orientation="columns"}
+=====================================
+
+Column {data-width=500}
+-------------------------------------
+
+### projets {.value-box}
+
+```{r projects}
+valueBox(
+  value = df_projets %>% nrow(), 
+  icon = "fa-briefcase"
+  )
+```
+
+### évaluations {.value-box}
+
+```{r evaluations}
+valueBox(
+  value = df_projets_evaluateurs %>% nrow(), 
+  icon = "fa-star-half-o"
+  )
+```
+
+Column {data-width=500}
+-------------------------------------
+
+### évaluateurs {.value-box}
+
+```{r evaluateurs}
+valueBox(
+  value = df_evaluateurs %>% distinct(evaluateur) %>% nrow(), 
+  icon = "fa-users"
+  )
+```
+
+### cœurs  {.value-box}
+
+```{r coeurs}
+valueBox(
+  value = df_coeurs %>% summarise(coeurs = sum(coup_de_coeur)) %>% .$coeurs, 
+  icon = "fa-heart"
+  )
+```
+
+### alertes  {.value-box}
+
+```{r alertes}
+valueBox(
+  value = df_coeurs %>% summarise(alertes = sum(alerte)) %>% .$alertes, 
+  icon = "fa-exclamation-triangle"
+  )
+```
+
+Synthèse par projet {data-icon="fa-table"}
+======================================================================
+
+```{r synthese}
+df_projets %>%
+  mutate(
+    slug = as.factor(slug),
+    sources = paste0("<a href=\"",as.character(slug),"/\" target=\"_blank\" title=\"en savoir plus\">", as.character(slug) ,"</a>"), 
+    DS = paste0(
+      "<a href=\"https://www.demarches-simplifiees.fr/procedures/5663/dossiers/", 
+      sub(
+        pattern = "^([[:digit:]]{5,6})\\-.*", 
+        replacement = "\\1", 
+        x = as.character(slug)
+        ),
+      "/\" target=\"_blank\" title=\"lien\">",
+      sub(
+        pattern = "^([[:digit:]]{5,6})\\-.*", 
+        replacement = "\\1", 
+        x = as.character(slug)
+        ),"</a>")
+    ) %>%
+  datatable(filter = 'top', escape = FALSE) %>%
+  formatSignif(~ note, digits = 2, interval = 3, mark = ",", 
+    dec.mark = getOption("OutDec"))
+```
+
+Synthèse par projet et par évaluateur {data-icon="fa-th-large"}
+======================================================================
+
+```{r evaluateur}
+df_projets_evaluateurs %>%
+  select(slug, evaluateur, note, alerte, coup_de_coeur) %>%
+  mutate(
+    slug = as.factor(slug), 
+    sources = paste0("<a href=\"",as.character(slug),"/\" target=\"_blank\" title=\"en savoir plus\">", as.character(slug) ,"</a>"),
+    evaluateur = as.factor(evaluateur)
+    ) %>%
+  datatable(filter = 'top', escape = FALSE)
+```
+
+Détail des notes {data-icon="fa-search-plus"}
+======================================================================
+
+```{r details}
+df_notes %>%
+  select(slug, evaluateur, critere, note_entre_1_et_5_, commentaires) %>% 
+  mutate(
+    slug = as.factor(slug), 
+    sources = paste0("<a href=\"",as.character(slug),"/\" target=\"_blank\" title=\"en savoir plus\">", as.character(slug) ,"</a>")
+    ) %>%
+  datatable(filter = 'top', escape = FALSE)
+```
+
