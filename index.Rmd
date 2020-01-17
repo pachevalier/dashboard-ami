@@ -9,20 +9,24 @@ output:
 ```{r setup, include=FALSE}
 library(flexdashboard)
 library(DT)
-library(wesanderson)
 library(purrr)
 library(dplyr)
+library(readr)
 source("functions.R")
+#list.files(pattern = "^[[:digit:]]{6}\\-", recursive = FALSE) %>% length()
+
 df_notes <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
   keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
   map_df(
     .f = get_review
     ) 
+
 df_evaluateurs <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
   keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
   map_df(
     .f = get_evaluateur
     ) 
+
 df_projets_notes <- df_notes %>%
   group_by(slug, critere) %>% 
   summarise(note = mean(note_entre_1_et_5_, na.rm = TRUE)) %>%
@@ -35,6 +39,18 @@ df_coeurs_evaluateurs <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
   map_df(
     .f = get_coupdecoeur
   ) 
+
+df_projets_accompagnement <- list.files(pattern = ".*\\.xlsx", recursive = TRUE) %>%
+  keep(.p = function(x) {grepl(pattern = "^[[:digit:]]{6}\\-", x = x)}) %>%
+  map_df(
+    .f = get_accompagnement
+  ) %>% 
+  group_by(slug) %>%
+  summarise(
+    accompagnement_scientifique = (sum(accompagnement_scientifique) > 0), 
+    accompagnement_technique_et_metier = (sum(accompagnement_technique_et_metier) > 0)
+  ) %>%
+  glimpse()
 
 df_projets_evaluateurs <- df_notes %>%
   group_by(file) %>% 
@@ -62,11 +78,16 @@ df_projets <- df_projets_notes %>%
   left_join(
     y = df_coeurs, 
     by = "slug"
-    ) 
+    ) %>%
+  left_join(
+    y = df_projets_accompagnement, 
+    by = "slug"
+  )
 
 df_projets %>%
   readr::write_csv(path = "table_projets.csv")
 ```
+
 Dashboard {data-icon="fa-tachometer" data-orientation="columns"}
 =====================================
 
